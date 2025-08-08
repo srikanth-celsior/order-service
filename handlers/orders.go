@@ -67,7 +67,6 @@ func GetOrder(ctx iris.Context) {
 	rdb := utils.GetRedisClient()
 	ctxRedis := context.Background()
 	cacheKey := "order:" + id
-
 	var o models.Order
 	// Try to get from Redis first
 	orderJson, err := rdb.Get(ctxRedis, cacheKey).Result()
@@ -76,6 +75,8 @@ func GetOrder(ctx iris.Context) {
 		ctx.ContentType("application/json")
 		ctx.Write([]byte(orderJson))
 		return
+	} else if err != nil && err.Error() != "redis: nil" {
+		log.Printf("[Redis] Error getting key %s: %v", cacheKey, err)
 	}
 
 	// Cache miss, fetch from DB
@@ -88,7 +89,9 @@ func GetOrder(ctx iris.Context) {
 
 	// Store in Redis
 	orderBytes, _ := json.Marshal(o)
-	rdb.Set(ctxRedis, cacheKey, orderBytes, 300*time.Second)
+	if err := rdb.Set(ctxRedis, cacheKey, orderBytes, 300*time.Second).Err(); err != nil {
+		log.Printf("[Redis] Error setting key %s: %v", cacheKey, err)
+	}
 
 	ctx.JSON(o)
 }
