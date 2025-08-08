@@ -1,10 +1,13 @@
 package handlers
 
 import (
+	"context"
+	"encoding/json"
 	"log"
 	"orders-service/database"
 	"orders-service/models"
 	"orders-service/pubsub"
+	"orders-service/utils"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -22,8 +25,8 @@ func CreateOrder(ctx iris.Context) {
 	// userID := ctx.Values().GetString("user_id")
 
 	row := database.DB.QueryRow(`
-        INSERT INTO orders (user_id, amount, status, created_at)
-        VALUES ($1, $2, 'pending', $3) RETURNING id`,
+		INSERT INTO orders (user_id, amount, status, created_at)
+		VALUES ($1, $2, 'pending', $3) RETURNING id`,
 		req.UserID, req.Amount, time.Now())
 
 	var orderID uuid.UUID
@@ -35,8 +38,8 @@ func CreateOrder(ctx iris.Context) {
 
 	for _, item := range req.Items {
 		row := database.DB.QueryRow(`
-	        INSERT INTO order_items (order_id, product_id, product_name, quantity, price)
-	        VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+			INSERT INTO order_items (order_id, product_id, product_name, quantity, price)
+			VALUES ($1, $2, $3, $4, $5) RETURNING id`,
 			orderID, item.ProductID, item.ProductName, item.Quantity, item.Price)
 		var itemID uuid.UUID
 		if err := row.Scan(&itemID); err != nil {
@@ -61,14 +64,31 @@ func CreateOrder(ctx iris.Context) {
 
 func GetOrder(ctx iris.Context) {
 	id := ctx.Params().Get("id")
-	row := database.DB.QueryRow("SELECT id, user_id, amount, status, created_at FROM orders WHERE id = $1", id)
+	rdb := utils.GetRedisClient()
+	ctxRedis := context.Background()
+	cacheKey := "order:" + id
 
 	var o models.Order
-	err := row.Scan(&o.ID, &o.UserID, &o.Amount, &o.Status, &o.CreatedAt)
+	// Try to get from Redis first
+	orderJson, err := rdb.Get(ctxRedis, cacheKey).Result()
+	if err == nil {
+		// Cache hit
+		ctx.ContentType("application/json")
+		ctx.Write([]byte(orderJson))
+		return
+	}
+
+	// Cache miss, fetch from DB
+	row := database.DB.QueryRow("SELECT id, user_id, amount, status, created_at FROM orders WHERE id = $1", id)
+	err = row.Scan(&o.ID, &o.UserID, &o.Amount, &o.Status, &o.CreatedAt)
 	if err != nil {
 		ctx.StopWithStatus(404)
 		return
 	}
+
+	// Store in Redis
+	orderBytes, _ := json.Marshal(o)
+	rdb.Set(ctxRedis, cacheKey, orderBytes, 300*time.Second)
 
 	ctx.JSON(o)
 }

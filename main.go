@@ -7,6 +7,7 @@ import (
 	"orders-service/middleware"
 	"orders-service/models"
 	"orders-service/pubsub"
+	"orders-service/utils"
 	"os"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 
 func main() {
 	_ = godotenv.Load()
+	utils.InitRedis()
 	if err := database.Connect(); err != nil {
 		log.Fatal("Database connection failed:", err)
 	}
