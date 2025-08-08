@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"orders-service/utils"
 	"os"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -18,7 +19,11 @@ func JWTMiddleware(ctx iris.Context) {
 		tokenString = tokenString[7:]
 	}
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return []byte(os.Getenv("JWT_SECRET")), nil
+		secret, err := utils.GetSecret("JWT_SECRET", os.Getenv("PUBSUB_PROJECT_ID"))
+		if err != nil {
+			return nil, err
+		}
+		return []byte(secret), nil
 	})
 	if err != nil || !token.Valid {
 		ctx.StopWithStatus(401)

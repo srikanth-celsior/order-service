@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"orders-service/utils"
+
 	_ "github.com/lib/pq"
 )
 
@@ -13,23 +15,26 @@ var DB *sql.DB
 func Connect() error {
 	var dsn string
 	useCloudSQL := os.Getenv("USE_CLOUD_SQL") == "true"
-
+	secrets, e := utils.GetSecrets([]string{"DB_PASSWORD", "DB_NAME", "DB_USER", "CLOUDSQL_CONNECTION_NAME"}, os.Getenv("PUBSUB_PROJECT_ID"))
+	if e != nil {
+		return fmt.Errorf("failed to get secrets: %w", e)
+	}
 	if useCloudSQL {
 		// Use Cloud SQL Unix socket connection
 		dsn = fmt.Sprintf("user=%s password=%s dbname=%s host=/cloudsql/%s sslmode=disable",
-			os.Getenv("DB_USER"),
-			os.Getenv("DB_PASSWORD"),
-			os.Getenv("DB_NAME"),
-			os.Getenv("CLOUDSQL_CONNECTION_NAME"),
+			secrets["DB_USER"],
+			secrets["DB_PASSWORD"],
+			secrets["DB_NAME"],
+			secrets["CLOUDSQL_CONNECTION_NAME"],
 		)
 	} else {
 		// Use local TCP connection
 		dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 			os.Getenv("DB_HOST"),
 			os.Getenv("DB_PORT"),
-			os.Getenv("DB_USER"),
-			os.Getenv("DB_PASSWORD"),
-			os.Getenv("DB_NAME"))
+			secrets["DB_USER"],
+			secrets["DB_PASSWORD"],
+			secrets["DB_NAME"])
 	}
 
 	var err error
