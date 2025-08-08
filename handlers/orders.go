@@ -22,7 +22,12 @@ func CreateOrder(ctx iris.Context) {
 		return
 	}
 
-	// userID := ctx.Values().GetString("user_id")
+	userID := ctx.Values().GetString("userID")
+	if userID == "" || userID != req.UserID {
+		ctx.StatusCode(iris.StatusUnauthorized)
+		ctx.JSON(iris.Map{"error": "Invalid user"})
+		return
+	}
 
 	row := database.DB.QueryRow(`
 		INSERT INTO orders (user_id, amount, status, created_at)
